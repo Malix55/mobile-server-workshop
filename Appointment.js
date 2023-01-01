@@ -10,8 +10,8 @@ const client = new MongoClient(uri)
 const Insert = async function (cid,date,time,cat,disc){
 
     await client.connect()
-    const db =  client.db('admin');
-    const items = db.collection('Appointments');
+    const db =  client.db('workshop');
+    const items = db.collection('appointments');
 
     const data = {
         cid:cid,
@@ -34,8 +34,8 @@ const Insert = async function (cid,date,time,cat,disc){
 const Edit = async function(id,new_status){
 
     await client.connect()
-    const db =  client.db('admin');
-    const items = db.collection('Appointments');
+    const db =  client.db('workshop');
+    const items = db.collection('appointments');
 
     const filter = {_id: ObjectID(id) }
     const new_values = {
@@ -54,11 +54,11 @@ const Edit = async function(id,new_status){
       return;
 }
 
-//Get Client Appointments
+//Get Client appointments
 const Get = async function(cid){
     await client.connect();
-    const DB = client.db('admin');
-    const collection = DB.collection('Appointments');
+    const DB = client.db('workshop');
+    const collection = DB.collection('appointments');
 
     const list = await collection.find({cid:cid},).toArray();
     client.close();
@@ -66,11 +66,11 @@ const Get = async function(cid){
 
 }
 
-//Get All Appointments
+//Get All appointments
 const Get_All = async function(cid){
     await client.connect();
-    const DB = client.db('admin');
-    const collection = DB.collection('Appointments');
+    const DB = client.db('workshop');
+    const collection = DB.collection('appointments');
 
     const list = await collection.find({},).toArray();
     client.close();
@@ -82,8 +82,8 @@ const Get_All = async function(cid){
 const Delete  = async function(id){
 
     await client.connect();
-    const DB = client.db('admin');
-    const collection = DB.collection('Appointments');
+    const DB = client.db('workshop');
+    const collection = DB.collection('appointments');
     await collection.deleteOne({_id : ObjectID(id)});
     client.close();
 

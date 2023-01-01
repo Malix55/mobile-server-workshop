@@ -2,7 +2,10 @@
 const shop = require('./E-shop');
 const Appointment = require('./Appointment')
 const RM = require('./RM')
+const data = require('./Data')
 const chalk = require('chalk')
+
+const fs = require('fs')
 const http = require('http')
 const express = require('express')
 const cors = require('cors')
@@ -50,12 +53,12 @@ const { json } = require('express/lib/response');
 const { Console, debug } = require('console');
 const console = require('console');
 const { strictEqual } = require('assert');
+const Data = require('./Data');
 var uri = 'mongodb://localhost:27017'
 var uri2 = 'mongodb+srv://osama:p4dFB4OCV3hbxHKs@cluster0.txsjl.mongodb.net/workshop?authSource=admin&replicaSet=atlas-vbzzgl-shard-0&readPreference=primary&appname=MongoDB%20Compass&ssl=true';
 const client = new MongoClient(uri2)
 server.listen(3000,()=>console.log(chalk.green.bold.inverse('Server Online @ 3000 > ')))
 //------------------------------------------
-
 //websocket
 
 
@@ -73,7 +76,6 @@ wss.on('connection',(ws)=>{
 
 
 //------------------------------------------
-
 //Authentication
 
 async function Authenticate(name,pwd){
@@ -173,9 +175,15 @@ app.post('/shop_insert',urlencodedParser,upload.single('image') ,(req,res)=>{
 })
 app.get('/img/:name',(req,res)=>{
     var path = "C:\\Users\\abida\\Desktop\\workshop\\workshop2.0\\Workshop-server\\uploads\\images";
-    res.sendFile(req.params.name,{root: `${path}`})
-    
-    })
+        try {
+        if(fs.existsSync(path)){
+            res.sendFile(req.params.name,{root: `${path}`})
+        }
+    }
+    catch(err) {
+        res.sendFile(null)
+      }    
+})
 app.get('/shop_edit/:id/:name/:cost/:Quantity',(req,res)=>{
 
     shop.Edit(req.params.id, req.params.name,req.params.cost,req.params.Quantity);
@@ -236,7 +244,6 @@ app.get('/new_appointment/:cid/:date/:Time/:Cat/:Dis',async (req,res)=>{
     const Time = req.params.Time;
     const Cat = req.params.Cat;
     const Dis = req.params.Dis;
-    Send_To_Debugger("> Client Initiated  an Appointment,1");
     await Appointment.Insert(cid,Date,Time,Cat,Dis);
     res.send(true);
 
@@ -267,6 +274,7 @@ res.send(Done);
 })
 
 
+
 //Remote Mechanic
 
 app.get('/status_update/:ID/:State/:Name',async(req,res)=>{
@@ -286,30 +294,149 @@ res.send('OK');
 
 
 })
-
 app.get('/new_apt/:id/:type/:dis',async(req,res)=>{
     console.log("New Reomte Appointment Recived");
+    
     var Remote_Appointm_ID =  await RM.New_Request(req.params.id,req.params.type,req.params.dis);
     var Recommended_Staff_ID =  await RM.Resolve_request(req.params.type);
 
-    console.log(Remote_Appointm_ID._id+" :: "+Recommended_Staff_ID);
+    if(Recommended_Staff_ID == "0"){res.send("0"); return;}
 
-    var x = "0001:"+params.id+":"+Recommended_Staff_ID+":"+Remote_Appointm_ID;
+    // code , from , to , apt_id 
+    var x = "0001,"+req.params.id+","+Recommended_Staff_ID+","+Remote_Appointm_ID._id;
     Send_To_All(x);
     
-    res.send("New Remote Apt Recived");
 })
-
-app.get('/Staff_Check_In/:id/:state',async(req,res)=>{
+app.get('/Staff_Check_In/:id/:state/:date/:time',async(req,res)=>{
     
     await RM.Check_In(req.params.id,req.params.state);
+    await Data.New_Checkin(req.params.id,req.params.state,req.params.date,req.params.time);
+    
+    return;
+
+})
+app.get('/Staff_Check_In_History/:id',async(req,res)=>{
+
+    const x = await Data.Get_Checkin_Histort(req.params.id);
+    res.send(x);
+
 })
 app.get('/Staff_Location/:id/:x/:y',async(req,res)=>{
     
     await RM.Set_Location(req.params.id,req.params.x,req.params.y);
 })
+app.get('/Apt_Acepted/:staff/:client/:apt_id',async(req,res)=>{
+
+    console.log("Apt Accepted")
+    await RM.Update_Apt_Status(req.params.apt_id,'Accepted');
+    await RM.Check_In(req.params.staff,'busy');
+    await RM.Assign_Staff(req.params.apt_id,req.params.staff);
+    var x = "1000,"+req.params.client+","+req.params.staff+","+req.params.apt_id;
+    Send_To_All(x);
+
+
+})
+app.get('/RM_APT_Next/:cid',async (req,res)=>{
+
+    console.log("Progress");
+    var x = "0003,"+req.params.cid;
+    Send_To_All(x);
+    res.send("abc")
+
+})
+app.get('/RMAPT_State/:id',async (req,res)=>{
+    var x = await RM.APT_Status(req.params.id);
+    res.send(x);
+})
+app.get('/RMAPT_State_update/:id/:state',async (req,res)=>{
+    await RM.Update_Apt_Status(req.params.id,req.params.state);
+    return;
+})
+app.get('/apts_count/:id/:type',async (req,res)=>{
+
+    var x = await RM.Total_Apts(req.params.id,req.params.type);
+    console.log(req.params.type);
+    res.send(x);
+})
+app.get('/APT_Score/:id/:type/',async (req,res)=>{
+
+    var x = await RM.Get_RM_ATS({Assigned_staff_id:req.params.id,type:req.params.type});
+    var z = 0
+    x.forEach(item =>{z+=(item.feedback)})
+    var y = x.length
+    var l = z/y;
+
+    if(y==0){res.send({l:5})}
+    else{res.send({l})}
+    
+
+})
+app.get('/feedback/:apt_id/:score',async (req,res)=>{
+    await RM.APT_Completed(req.params.apt_id);
+    await RM.Feed_Back(req.params.apt_id,req.params.score);
+return;
+
+
+})
+app.get('/Completed_Apts/:id',async(req,res)=>{
+    const x = await RM.Completed_Request(req.params.id);
+    res.send(x);    
+})
+//location
+
+app.get('/Get_Location_C/:id',async (req,res) =>{
+
+    const user = await RM.Get_Location_Client(req.params.id);
+   var x = user.longitude;
+   var y = user.latitude;
+
+    res.send( {x,y})
+
+})
+
+app.get('/Get_Location_S/:id',async (req,res) =>{
+
+    const user = await RM.Get_Location_Staff(req.params.id);
+   // console.log(user)
+   var x = user.longitude;
+   var y = user.latitude;
+
+    res.send( {x,y})
+
+})
+
 // -----------------------------
 
+app.get('/Get_Client_Data/:id',async(req,res)=>{
+    
+    var data =  await RM.Client_Data(req.params.id);
+    res.send(data);
+})
+app.get('/Get_Staff_Data/:id',async(req,res)=>{
+    
+    var data =  await RM.Staff_Data(req.params.id);
+    res.send(data);
+})
+app.get('/Get_RMAPT_Data/:id',async(req,res)=>{
+    
+    var data =  await RM.RMA_Data(req.params.id);
+    res.send(data);
+})
+app.get('/Fwd_Message/:to/:txt',async(req,res)=>{
+
+    console.log("0002,"+req.params.to+","+req.params.txt);
+    Send_To_All("0002,"+req.params.to+","+req.params.txt);
+    return;
+
+})
+
+//Get_Data
+app.get('/Data_Name/:id',async(req,res)=>{
+
+    const x= await data.Get_User_Name(req.params.id);
+    res.send(x);
+
+})
 
 //------------------------------
 function Send_To_Debugger(x){
@@ -318,8 +445,8 @@ function Send_To_Debugger(x){
       client.send(x);
     }
   });}
-
   function Send_To_All(x){
+      console.log("socket ::"+x)
     wss.clients.forEach(function each(client) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(x);
